@@ -1,15 +1,26 @@
 const WebSocket = require("ws");
 
 const PORT = process.env.PORT || 3000;
-const wss = new WebSocket.Server({ port: PORT });
+
+const wss = new WebSocket.Server({
+    port: PORT
+});
 
 const rooms = {};
 
+function send(ws, data) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+    }
+}
+
 wss.on("connection", (ws) => {
+
     let currentRoom = null;
     let peerId = null;
 
     ws.on("message", (message) => {
+
         let data;
 
         try {
@@ -18,79 +29,133 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        // CREATE ROOM
-        if (data.type === "create") {
-            currentRoom = String(data.room).toUpperCase();
-            peerId = String(data.id);
-
-            if (!rooms[currentRoom]) {
-                rooms[currentRoom] = {};
-            }
-
-            rooms[currentRoom][peerId] = ws;
-
-            ws.send(JSON.stringify({
-                type: "created",
-                code: currentRoom
-            }));
-
-            console.log("ROOM CREATED:", currentRoom);
+        if (!data.type) {
+            return;
         }
 
-        // JOIN ROOM
-        else if (data.type === "join") {
-            currentRoom = String(data.room).toUpperCase();
-            peerId = String(data.id);
+        if (data.type === "create") {
 
-            if (!rooms[currentRoom]) {
-                ws.send(JSON.stringify({
+            const room = String(data.room || "").trim().toUpperCase();
+            const id = String(data.id || "");
+
+            if (room === "" || id === "") {
+                send(ws, {
                     type: "error",
-                    message: "ROOM_NOT_FOUND"
-                }));
+                    message: "Invalid room"
+                });
                 return;
             }
 
-            rooms[currentRoom][peerId] = ws;
-
-            console.log("PLAYER JOINED:", peerId, "ROOM:", currentRoom);
-
-            for (const id in rooms[currentRoom]) {
-                if (id !== peerId) {
-
-                    // Tell old player
-                    rooms[currentRoom][id].send(JSON.stringify({
-                        type: "peer_joined",
-                        id: Number(peerId)
-                    }));
-
-                    // Tell new player
-                    ws.send(JSON.stringify({
-                        type: "peer_joined",
-                        id: Number(id)
-                    }));
-                }
+            if (rooms[room]) {
+                send(ws, {
+                    type: "error",
+                    message: "Room already exists"
+                });
+                return;
             }
+
+            currentRoom = room;
+            peerId = id;
+
+            rooms[room] = {
+                [peerId]: ws
+            };
+
+            send(ws, {
+                type: "created",
+                code: room
+            });
+
+            return;
         }
 
-        // WEBRTC SIGNAL
-        else if (data.type === "signal") {
-            if (
-                currentRoom &&
-                rooms[currentRoom] &&
-                rooms[currentRoom][String(data.to)]
-            ) {
-                rooms[currentRoom][String(data.to)].send(
-                    JSON.stringify({
-                        type: "signal",
-                        from: Number(peerId),
-                        data: data.data
-                    })
-                );
+        if (data.type === "join") {
+
+            const room = String(data.room || "").trim().toUpperCase();
+            const id = String(data.id || "");
+
+            if (room === "" || id === "") {
+                send(ws, {
+                    type: "error",
+                    message: "Invalid room"
+                });
+                return;
             }
+
+            if (!rooms[room]) {
+                send(ws, {
+                    type: "error",
+                    message: "Room not found"
+                });
+                return;
+            }
+
+            const playerCount = Object.keys(rooms[room]).length;
+
+            if (playerCount >= 2) {
+                send(ws, {
+                    type: "error",
+                    message: "Room full"
+                });
+                return;
+            }
+
+            currentRoom = room;
+            peerId = id;
+
+            rooms[room][peerId] = ws;
+
+            for (const existingId in rooms[room]) {
+
+                if (existingId === peerId) {
+                    continue;
+                }
+
+                const existingWs = rooms[room][existingId];
+
+                send(existingWs, {
+                    type: "peer_joined",
+                    id: peerId
+                });
+
+                send(ws, {
+                    type: "peer_joined",
+                    id: existingId
+                });
+            }
+
+            return;
+        }
+
+        if (data.type === "signal") {
+
+            if (!currentRoom) {
+                return;
+            }
+
+            if (!rooms[currentRoom]) {
+                return;
+            }
+
+            const targetId = String(data.to || "");
+            const target = rooms[currentRoom][targetId];
+
+            if (!target) {
+                return;
+            }
+
+            send(target, {
+                type: "signal",
+                from: peerId,
+                data: data.data
+            });
+
+            return;
         }
     });
 
     ws.on("close", () => {
+
         if (!currentRoom || !rooms[currentRoom]) {
             return;
         }
@@ -98,18 +163,20 @@ wss.on("connection", (ws) => {
         delete rooms[currentRoom][peerId];
 
         for (const id in rooms[currentRoom]) {
-            rooms[currentRoom][id].send(
-                JSON.stringify({
-                    type: "peer_left",
-                    id: Number(peerId)
-                })
-            );
+
+            send(rooms[currentRoom][id], {
+                type: "peer_left",
+                id: peerId
+            });
         }
 
         if (Object.keys(rooms[currentRoom]).length === 0) {
             delete rooms[currentRoom];
         }
+
+        currentRoom = null;
+        peerId = null;
     });
 });
 
-console.log(`Signaling server running on port ${PORT}`);
+console.log("Signaling server running on port " + PORT);
