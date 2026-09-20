@@ -14,13 +14,15 @@ function send(ws, data) {
     }
 }
 
-wss.on("connection", (ws) => {
+function roomSize(room) {
+    return room ? Object.keys(room).length : 0;
+}
 
+wss.on("connection", (ws) => {
     let currentRoom = null;
     let peerId = null;
 
     ws.on("message", (message) => {
-
         let data;
 
         try {
@@ -29,16 +31,19 @@ wss.on("connection", (ws) => {
             return;
         }
 
-        if (!data.type) {
+        if (!data || !data.type) {
             return;
         }
 
+        // =========================
+        // CREATE ROOM
+        // =========================
+
         if (data.type === "create") {
-
             const room = String(data.room || "").trim().toUpperCase();
-            const id = String(data.id || "");
+            const id = String(data.id || "").trim();
 
-            if (room === "" || id === "") {
+            if (room.length !== 5 || id === "") {
                 send(ws, {
                     type: "error",
                     message: "Invalid room"
@@ -57,9 +62,8 @@ wss.on("connection", (ws) => {
             currentRoom = room;
             peerId = id;
 
-            rooms[room] = {
-                [peerId]: ws
-            };
+            rooms[room] = {};
+            rooms[room][peerId] = ws;
 
             send(ws, {
                 type: "created",
@@ -69,12 +73,15 @@ wss.on("connection", (ws) => {
             return;
         }
 
+        // =========================
+        // JOIN ROOM
+        // =========================
+
         if (data.type === "join") {
-
             const room = String(data.room || "").trim().toUpperCase();
-            const id = String(data.id || "");
+            const id = String(data.id || "").trim();
 
-            if (room === "" || id === "") {
+            if (room.length !== 5 || id === "") {
                 send(ws, {
                     type: "error",
                     message: "Invalid room"
@@ -90,9 +97,7 @@ wss.on("connection", (ws) => {
                 return;
             }
 
-            const playerCount = Object.keys(rooms[room]).length;
-
-            if (playerCount >= 2) {
+            if (roomSize(rooms[room]) >= 2) {
                 send(ws, {
                     type: "error",
                     message: "Room full"
@@ -105,8 +110,14 @@ wss.on("connection", (ws) => {
 
             rooms[room][peerId] = ws;
 
-            for (const existingId in rooms[room]) {
+            // Tell JOINER that the room actually exists.
+            send(ws, {
+                type: "joined",
+                code: room
+            });
 
+            // Tell both sides about the new peer.
+            for (const existingId in rooms[room]) {
                 if (existingId === peerId) {
                     continue;
                 }
@@ -127,13 +138,12 @@ wss.on("connection", (ws) => {
             return;
         }
 
+        // =========================
+        // SIGNAL
+        // =========================
+
         if (data.type === "signal") {
-
-            if (!currentRoom) {
-                return;
-            }
-
-            if (!rooms[currentRoom]) {
+            if (!currentRoom || !rooms[currentRoom] || !peerId) {
                 return;
             }
 
@@ -154,23 +164,25 @@ wss.on("connection", (ws) => {
         }
     });
 
-    ws.on("close", () => {
+    // =========================
+    // DISCONNECT
+    // =========================
 
-        if (!currentRoom || !rooms[currentRoom]) {
+    ws.on("close", () => {
+        if (!currentRoom || !rooms[currentRoom] || !peerId) {
             return;
         }
 
         delete rooms[currentRoom][peerId];
 
         for (const id in rooms[currentRoom]) {
-
             send(rooms[currentRoom][id], {
                 type: "peer_left",
                 id: peerId
             });
         }
 
-        if (Object.keys(rooms[currentRoom]).length === 0) {
+        if (roomSize(rooms[currentRoom]) === 0) {
             delete rooms[currentRoom];
         }
 
