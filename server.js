@@ -29,7 +29,7 @@ wss.on('connection', (ws) => {
             currentRoom = data.room;
             peerId = data.id;
 
-            // التحقق الذكي: إذا لم تكن الغرفة موجودة أصلاً (أنشأها Host)، ارفض الطلب فوراً!
+            // إذا لم تكن الغرفة موجودة أصلاً (لم ينشئها Host)، ارفض الطلب فوراً وأرسل خطأ!
             if (!rooms[currentRoom] || Object.keys(rooms[currentRoom]).length === 0) {
                 ws.send(JSON.stringify({ type: 'error', message: 'Room not found or invalid code!' }));
                 return;
@@ -71,3 +71,4 @@ wss.on('connection', (ws) => {
 });
 
 console.log(`Signaling server running on port ${PORT}`);
+
