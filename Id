@@ -1,6 +1,18 @@
-​@Codebase أعمل حالياً على لعبة رعب بـ Godot 4 (GDScript). أريدك أن تكتب لي سكريبت متكامل ومحترف لتحريك اللاعب بمنظور الشخص الأول (CharacterBody3D) يحتوي على الميزات التالية الخاصة بألعاب الرعب:
-​حركة سلسة وواقعية: حركة مشي طبيعية، مع ميزة الجري (Sprint) بالضغط على زر Shift، وانخفاض التدريجي في التحمل (Stamina) عند الجري.
-​إمالة الكاميرا عند الحركة (Head Bobbing): اهتزاز خفيف وواقعي للكاميرا للأعلى والأسفل أثناء المشي ليعطي إحساساً بخطوات الشخصية وحركتها الحقيقية.
-​الالتفات بالماوس (Mouse Look): حركة كاميرا سلسة ودقيقة مع تقييد زاوية النظر عمودياً (للاعلى والأسفل) لكي لا تنقلب الكاميرا.
-​نظام التفاعل بالنظر (Raycast/Interaction): إضافة RayCast3D للأمام لكي يتعرف اللاعب على الأبواب، المفاتيح، أو الأشياء القابلة للتفاعل عندما ينظر إليها مباشرة.
-​أرجو أن توضح لي أولاً ما هي العقد (Nodes) التي يجب أن أضيفها داخل شجرة المشهد (Scene Tree) في Godot، ثم اكتب لي الكود البرمجي بالكامل لكي أضعه في السكريبت!
+Act as an expert Godot 4 game developer. I am building a Victorian psychological horror escape room. 
+
+I need a complete GDScript and setup guide for an interactive TV and VHS tape system. Here is my setup:
+1. TV Screen Mesh: `Screen_21/Object_62`
+2. A `SubViewport` node in my scene containing 3 cameras: `Camera3D`, `Camera3D2`, and `Camera3D3`.
+3. An `AudioStreamPlayer3D` for VHS static and warning audio.
+4. A VHS tape node equipped with an `Area3D` and `CollisionShape3D` for player interaction.
+
+Please write a clean GDScript that handles the full logic:
+- Initial State: At the start of the game, the TV screen (`Object_62`) must use a solid black material (`StandardMaterial3D`) so it looks completely turned off.
+- Interaction: When the player interacts with the VHS tape `Area3D`, it calls a function like `play_vhs_tape()`.
+- Cinematic Sequence inside `play_vhs_tape()`:
+  1. Play the VHS audio (`AudioStreamPlayer3D`).
+  2. Show a temporary static/noise effect on the TV screen for 1.5 seconds.
+  3. After the static phase, dynamically change the TV screen material's texture to a `ViewportTexture` linked to my `SubViewport`, and enable emission so the screen glows.
+  4. Start a cinematic camera sequence: switch `Camera3D.current = true`, wait 3 seconds using `await get_tree().create_timer(3.0).timeout`, then switch to `Camera3D2.current = true`, wait 3 seconds, and finally switch to `Camera3D3.current = true`.
+
+Please provide the complete script, tell me which node to attach it to, and show how to connect the Area3D signal.
